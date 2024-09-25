@@ -1,0 +1,131 @@
+using Lux: AbstractRecurrentCell, StaticBool, True, False
+using Lux: static
+using Lux: BoolType
+using Lux: IntegerType
+using Lux: @concrete
+using Lux
+using Random
+
+_ConvLSTMInputType{T, N} = Tuple{<:AbstractArray{T, N}, Tuple{<:AbstractArray{T, N}, <:AbstractArray{T, N}}}
+
+@concrete struct ConvLSTMCell <: AbstractRecurrentCell
+    train_state <: StaticBool
+    train_memory <: StaticBool
+    Wi
+    Wh
+    init_state
+    init_memory
+end
+
+function ConvLSTMCell(
+    k_i2h::NTuple{N,Integer},
+    k_h2h::NTuple{N,Integer},
+    (in_chs, out_chs)::Pair{<:Integer,<:Integer},
+    use_bias::BoolType=True(),
+    train_state::BoolType=False(), 
+    train_memory::BoolType=False(),
+    pad=0,
+    init_weight=nothing, 
+    init_bias=nothing, 
+    init_state=zeros32,
+    init_memory=zeros32,
+    ) where {N}
+    input_to_hidden = in_chs => out_chs
+    hidden_to_hidden = out_chs => out_chs
+
+    Wi = Conv(k_i2h, input_to_hidden; init_weight, init_bias, pad=pad, use_bias)
+    Wh = Conv(k_h2h, hidden_to_hidden; init_weight, init_bias, pad=SamePad(), use_bias=False())
+
+    return ConvLSTMCell(static(train_state), static(train_memory), Wi, Wh, init_state, init_memory)
+end
+
+Lux.initialstates(rng::AbstractRNG, ::ConvLSTMCell) = (rng=Lux.Utils.sample_replicate(rng),)
+
+
+function Lux.initialparameters(rng::AbstractRNG, lstm::ConvLSTMCell)
+    ps = NamedTuple()
+    for gate in ("i", "o", "f", "c")
+        Wi = Lux.initialparameters(rng, lstm.Wi)
+        Wh = Lux.initialparameters(rng, lstm.Wh)
+        ps = merge(ps, NamedTuple([(Symbol("Wi_$(gate)"), Wi), (Symbol("Wh_$(gate)"), Wh)]))
+    end
+    if Lux.has_bias(lstm)
+        bias_ih = vcat([init_rnn_bias(rng, init_bias, lstm.out_dims, lstm.out_dims)
+                        for init_bias in lstm.init_bias]...)
+        bias_hh = vcat([init_rnn_bias(rng, init_bias, lstm.out_dims, lstm.out_dims)
+                        for init_bias in lstm.init_bias]...)
+        ps = merge(ps, (; bias_ih, bias_hh))
+    end
+    Lux.has_train_state(lstm) &&
+        (ps = merge(ps, (hidden_state=lstm.init_state(rng, lstm.out_dims),)))
+    Lux.known(lstm.train_memory) &&
+        (ps = merge(ps, (memory=lstm.init_memory(rng, lstm.out_dims),)))
+    return ps
+end
+
+function calc_out_dims(W::NTuple{M}, padding::NTuple{N}, K::NTuple{M}, stride) where {N,M}
+    if N == M 
+      pad = padding .* 2
+    elseif N==M*2
+      pad = ntuple(i -> padding[2i-1] + padding[2i], M)
+    end
+    ((W .+ pad .- K) .÷ stride) .+ 1
+end
+
+function Lux.init_rnn_hidden_state(rng::AbstractRNG, lstm::ConvLSTMCell, x::AbstractArray{T, N}) where {T, N}
+    # TODO: Once we support moving `rng` to the device, we can directly initialize on the
+    #       device
+    input_size = ntuple(i -> size(x, i), N-2)
+    hidden_size = calc_out_dims(input_size, lstm.Wi.pad, lstm.Wi.kernel_size, lstm.Wi.stride)
+    channels = lstm.Wh.in_chs
+    lstm.init_state(rng, hidden_size..., channels, size(x, N))
+end
+
+# Lux.Utils.gate(x::AbstractArray{T, N}, h::Int, n::Int) where {T, N} = view(x, Lux.Utils.gate(h, n), ntuple(_ -> :, N-1)...)
+
+
+function (lstm::ConvLSTMCell{False, False})(x::AbstractArray, ps, st::NamedTuple)
+    rng = Lux.replicate(st.rng)
+    hidden_state = Lux.init_rnn_hidden_state(rng, lstm, x)
+    memory = Lux.init_rnn_hidden_state(rng, lstm, x)
+    return lstm((x, (hidden_state, memory)), ps, merge(st, (; rng)))
+end
+
+function (lstm::ConvLSTMCell)((x, (hiddenₙ, memoryₙ))::_ConvLSTMInputType{T,N}, ps, st::NamedTuple) where {T, N}
+    Wi_i, st_i = lstm.Wi(x, ps.Wi_i, st)
+    st = merge(st, st_i)
+    
+    Wi_f, st_i = lstm.Wi(x, ps.Wi_f, st)
+    st = merge(st, st_i)
+
+    Wi_c, st_i = lstm.Wi(x, ps.Wi_c, st)
+    st = merge(st, st_i)
+
+    Wi_o, st_i = lstm.Wi(x, ps.Wi_o, st)
+    st = merge(st, st_i)
+
+
+    Wh_i, st_h = lstm.Wh(hiddenₙ, ps.Wh_i, st)
+    st = merge(st, st_h)
+    
+    Wh_f, st_h = lstm.Wh(hiddenₙ, ps.Wh_f, st)
+    st = merge(st, st_h)
+
+    Wh_c, st_h = lstm.Wh(hiddenₙ, ps.Wh_c, st)
+    st = merge(st, st_h)
+
+    Wh_o, st_h = lstm.Wh(hiddenₙ, ps.Wh_o, st)
+    st = merge(st, st_h)
+
+    input  = Wi_i .+ Wh_i
+    forget = Wi_f .+ Wh_f
+    cell   = Wi_c .+ Wh_c
+    output = Wi_o .+ Wh_o
+
+    memory₂ = @. sigmoid_fast(forget) * memoryₙ + sigmoid_fast(input) * tanh_fast(cell)
+    hidden₂ = @. sigmoid_fast(output) * tanh_fast(memory₂)
+    return (hidden₂, (hidden₂, memory₂)), st
+end
+
+
+
