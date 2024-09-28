@@ -89,7 +89,7 @@ function Lux.init_rnn_hidden_state(rng::AbstractRNG, lstm::ConvLSTMCell, x::Abst
     input_size = ntuple(i -> size(x, i), N-2)
     hidden_size = calc_out_dims(input_size, lstm.Wx.pad, lstm.Wx.kernel_size, lstm.Wx.stride)
     channels = lstm.Wh.in_chs
-    lstm.init_state(rng, hidden_size..., channels, size(x, N))
+    lstm.init_state(rng, hidden_size..., channels, size(x, N)) |> Lux.get_device(x)
 end
 
 

@@ -1,73 +1,20 @@
 using Lux, Random, Optimisers, Zygote
-using Metal
+using CUDA, LuxCUDA
 using NPZ
 using MLUtils
 using Printf
 using ProgressMeter
+using MLFlowClient
 using JLD2
+using Statistics
 
-include("./recurrent/peepholeconvlstm.jl")
+include("./recurrent/convlstm.jl")
 
-struct ConvLSTM{E, D, C} <: Lux.AbstractLuxContainerLayer{(:encoder, :decoder, :last_conv)}
-    encoder::E
-    decoder::D
-    last_conv::C
-end
+mlf = MLFlow()
+experiment = getorcreateexperiment(mlf, "lux-mnist")
+run_info = createrun(mlf, experiment)
 
-function (r::Recurrence{False})(x::Union{AbstractVector, NTuple}, ps, st::NamedTuple)
-    (out, carry), st = Lux.apply(r.cell, first(x), ps, st)
-    for xᵢ in x[(begin + 1):end]
-        (out, carry), st = Lux.apply(r.cell, (xᵢ, carry), ps, st)
-    end
-    return (out, carry), st
-end
-
-function ConvLSTM(
-    k_x::NTuple{N},
-    k_h::NTuple{N},
-    in_dims, hidden_dims, out_dims,
-) where {N}
-    return ConvLSTM(
-        Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=false)),
-        ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims, peephole=false),
-        Conv(ntuple(Returns(1), N), hidden_dims => out_dims, use_bias=false),
-    )
-end
-
-function (c::ConvLSTM)(x::AbstractArray{T, 5}, ps::NamedTuple, st::NamedTuple) where {T}
-    (y, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
-    (ys, carry), st_decoder = c.decoder((y, carry), ps.decoder, st.decoder)
-    output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
-    out = reshape(output, 64, 64, 1, :)
-    for _ in 2:10
-        (ys, carry), st_decoder = c.decoder((ys, carry), ps.decoder, st_decoder)
-        output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
-        out = cat(out, output; dims=Val(3))
-    end
-    return out, merge(st, (encoder=st_encoder, decoder=st_decoder, last_conv=st_last_conv))
-end
-
-
-# function ConvLSTM()
-#     encoder = Recurrence(ConvLSTMCell((5, 5), (5, 5), 1 => 8))
-#     decoder = ConvLSTMCell((5, 5), (5, 5), 8 => 8)
-#     conv_last = Conv((1, 1), 8 => 1, use_bias=false)
-
-#     @compact(; encoder, decoder, conv_last) do x::AbstractArray{T, 5} where {T}
-#         y = encoder(x)
-#         @info "kho"
-#         @show size(y)
-#         ys, carry = decoder((y, carry))
-#         out = [conv_last(ys)]
-#         for _ in 2:10
-#             ys, carry = decoder((y, carry))
-#             out = vcat(out, [conv_last(ys)])
-#         end
-#         @return cat(out; dims=Val(3))
-#     end
-# end
-
-const lossfn = BinaryCrossEntropyLoss(; logits=Val(true))
+const lossfn = MSELoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
@@ -88,38 +35,106 @@ function get_dataloaders()
 end
 
 function main()
-
-    dev = cpu_device()
+    dev = gpu_device()
     train_loader, val_loader = get_dataloaders() .|> dev
-    model = ConvLSTM((5, 5), (5, 5), 1, 64, 1)
-    rng = Xoshiro(42)
+    k_h = 5
+    k_x = 5
+    hidden = 8
+    seed = 42
+    steps = [1, 3, 5, 10]
+
+    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, σ)
+    @save "./artifacts/model_config.jld2" model
+    logartifact(mlf, run_info, "./artifacts/model_config.jld2")
+    rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
-    train_state = Training.TrainState(model, ps, st, Adam(0.01f0))
+    eta = 3e-4
+    rho = 0.9
+    logparam(mlf, run_info, Dict(
+        "rand.algo" => "Xoshiro",
+        "rand.seed" => seed,
+        "opt.eta" => eta,
+        "opt.rho" => rho,
+        "model.kernel_hidden" => k_h,
+        "model.kernel_input" => k_x,
+        "model.hidden_dims" => hidden,
+    ))
+
+    train_state = Training.TrainState(model, ps, st, RMSProp(eta, rho))
     @info "Starting train"
-    for epoch in 1:3
+    for epoch in 1:40
         ## Train the model
         progress = Progress(length(train_loader); desc="Training Epoch $(epoch)")
+        losses = Float32[]
         for (x, y) in train_loader
             (_, loss, _, train_state) = Training.single_train_step!(
                 AutoZygote(), lossfn, (x, y), train_state
             )
+            push!(losses, loss)
             next!(progress; showvalues = [("loss", loss)])
         end
-
+        logmetric(mlf, run_info, "loss_train", mean(losses); step=epoch)
+        losses = Float32[]
+        accuracies = Float32[]
         ## Validate the model
+        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)")
         st_ = Lux.testmode(train_state.states)
+        loss_at = Dict{Int, Vector{Float32}}()
+        acc_at = Dict{Int, Vector{Float32}}()
+        for s in steps
+            loss_at[s] = Float32[]
+            acc_at[s] = Float32[]
+        end
         for (x, y) in val_loader
             ŷ, st_ = model(x, train_state.parameters, st_)
             loss = lossfn(ŷ, y)
             acc = accuracy(ŷ, y)
-            @printf "Validation: Loss %4.5f Accuracy %4.5f\n" loss acc
+            for s in steps
+                push!(loss_at[s], lossfn(ŷ[:, :, s, :], y[:, :, s, :]))
+                push!(acc_at[s], accuracy(ŷ[:, :, s, :], y[:, :, s, :]))
+            end
+            push!(losses, loss)
+            push!(accuracies, acc)
+            next!(progress; showvalues = [("loss", loss), ("acc", acc)])
         end
+        logmetric(mlf, run_info, "loss_test", mean(losses); step=epoch)
+        logmetric(mlf, run_info, "acc_test", mean(accuracies); step=epoch)
+        for s in steps
+            logmetric(mlf, run_info, "acc_test.$(s)", mean(acc_at[s]); step=epoch)
+            logmetric(mlf, run_info, "loss_test.$(s)", mean(loss_at[s]); step=epoch)
+        end
+
+        ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
+        @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
+        logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
     end
     return (model, train_state.parameters, train_state.states) |> cpu_device()
 end
 
 model, ps_trained, st_trained = main()
 
-@save "trained_model.jld2" ps_trained st_trained
+@save "./artifacts/trained_model.jld2" ps_trained st_trained
 
-@save "model_config.jld2" model
+logartifact(mlf, run_info, "./artifacts/trained_model.jld2")
+
+using Plots
+
+_, val_loader = get_dataloaders()
+
+x, y = first(val_loader)
+
+st_ = Lux.testmode(st_trained)
+ŷ, st_ = model(x, ps_trained, st_)
+
+for idx in [1, 3, 7, 8, 9]
+    data_to_plot = vcat(
+        reshape(ŷ[:, :, :, idx], 64, :),
+        reshape(y[:, :, :, idx], 64, :),
+        reshape(x[:, :, 1, :, idx], 64, :),
+    )
+    fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
+    savefig(fig, "./artifacts/predictions_$(idx).png")
+    logartifact(mlf, run_info, "./artifacts/predictions_$(idx).png")
+end
+
+updaterun(mlf, run_info, "FINISHED")
