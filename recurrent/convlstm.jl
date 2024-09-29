@@ -34,8 +34,7 @@ end
 # WHCTN
 function (c::ConvLSTM)(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
     (y, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
-    x_last = selectdim(x, N-1, size(x, N-1))
-    (ys, carry), st_decoder = c.decoder((x_last .- y, carry), ps.decoder, st.decoder)
+    (ys, carry), st_decoder = c.decoder((y, carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = reshape(output, size(output)[1:N-2]..., :)
     for _ in 2:c.steps
