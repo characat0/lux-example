@@ -42,6 +42,7 @@ end
 function objective(
     run_info;
     device_id=1,
+    logging=true,
     k_x,
     k_h,
     hidden,
@@ -74,7 +75,7 @@ function objective(
     @info "Starting train"
     for epoch in 1:n_steps
         ## Train the model
-        progress = Progress(length(train_loader); desc="Training Epoch $(epoch)")
+        progress = Progress(length(train_loader); desc="Training Epoch $(epoch)", enabled=logging)
         losses = Float32[]
         for (x, y) in train_loader
             (_, loss, _, train_state) = Training.single_train_step!(
@@ -87,7 +88,7 @@ function objective(
         losses = Float32[]
         accuracies = Float32[]
         ## Validate the model
-        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)")
+        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)", enabled=logging)
         st_ = Lux.testmode(train_state.states)
         loss_at = Dict{Int, Vector{Float32}}()
         acc_at = Dict{Int, Vector{Float32}}()
