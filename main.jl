@@ -154,9 +154,9 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=8,
+    hidden=1,
     seed=42,
-    eta=4e-3,
-    lambda=4e-3,
+    eta=4e-2,
+    lambda=5e-3,
     n_steps=20,
 )
