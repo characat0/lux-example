@@ -65,7 +65,7 @@ function objective(
     hidden,
     seed,
     eta,
-    lambda,
+    rho,
     n_steps,
 )
     dev = gpu_device(device_id, force_gpu_usage=true)
@@ -81,14 +81,14 @@ function objective(
         "rand.algo" => "Xoshiro",
         "rand.seed" => seed,
         "opt.algo" => "AdamW",
-        "opt.lambda" => lambda,
+        "opt.rho" => rho,
         "opt.eta" => eta,
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
     ))
 
-    train_state = Training.TrainState(model, ps, st, AdamW(; eta, lambda))
+    train_state = Training.TrainState(model, ps, st, RMSProp(; eta, rho))
     @info "Starting train"
     for epoch in 1:n_steps
         ## Train the model
@@ -166,9 +166,9 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=1,
+    hidden=128,
     seed=42,
-    eta=4e-2,
-    lambda=5e-3,
+    eta=0.001,
+    rho=0.9,
     n_steps=20,
 )
