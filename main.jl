@@ -38,6 +38,23 @@ function get_dataloaders()
     )
 end
 
+function plot_predictions(model, train_state, data, run_info, epoch)
+    x, y = data
+    ps_trained, st_trained = (train_state.parameters, train_state.states)
+    ŷ, _ = model(x, ps_trained, Lux.testmode(st_trained))
+
+    for idx in [1, 3, 7]
+        data_to_plot = vcat(
+            reshape(ŷ[:, :, :, idx], 64, :),
+            reshape(y[:, :, :, idx], 64, :),
+            reshape(x[:, :, 1, :, idx], 64, :),
+        ) |> cpu_device()
+        fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
+        savefig(fig, "./artifacts/epoch_$(lpad(epoch, 2, '0'))_predictions_$(idx)_step.png")
+        logartifact(mlf, run_info, "./artifacts/epoch_$(lpad(epoch, 2, '0'))_predictions_$(idx)_step.png")
+    end
+end
+
 
 function objective(
     run_info;
@@ -55,7 +72,7 @@ function objective(
     train_loader, val_loader = get_dataloaders() .|> dev
     steps = [1, 3, 5, 10]
 
-    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, σ)
+    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
     @save "./artifacts/model_config.jld2" model
     logartifact(mlf, run_info, "./artifacts/model_config.jld2")
     rng = Xoshiro(seed)
@@ -118,25 +135,15 @@ function objective(
         ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
         @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
         logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
+
+        if ((epoch - 1) % 4 == 0) || (epoch == n_steps)
+            plot_predictions(model, train_state, first(val_loader), run_info, epoch)
+        end
     end
 
     ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
     @save "./artifacts/trained_model.jld2" ps_trained st_trained
-    x, y = first(val_loader)
-
-    st_ = Lux.testmode(train_state.states)
-    ŷ, st_ = model(x, train_state.parameters, st_)
-
-    for idx in [1, 3, 7, 8, 9]
-        data_to_plot = vcat(
-            reshape(ŷ[:, :, :, idx], 64, :),
-            reshape(y[:, :, :, idx], 64, :),
-            reshape(x[:, :, 1, :, idx], 64, :),
-        ) |> cpu_device()
-        fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
-        savefig(fig, "./artifacts/predictions_$(idx)_step.png")
-        logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
-    end
+    logartifact(mlf, run_info, "./artifacts/trained_model.jld2")
 end
 
 function objective(; kwargs...)
@@ -145,8 +152,12 @@ function objective(; kwargs...)
     try
         objective(run_info; kwargs...)
         updaterun(mlf, run_info, "FINISHED")
-    catch
-        updaterun(mlf, run_info, "FAILED")
+    catch e
+        if typeof(e) <: InterruptException
+            updaterun(mlf, run_info, "KILLED")
+        else
+            updaterun(mlf, run_info, "FAILED")
+        end
         rethrow()
     end
 end
