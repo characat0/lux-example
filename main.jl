@@ -138,7 +138,7 @@ end
 
 
 try
-    main(;
+    objective(;
         k_h=5,
         k_x=5,
         hidden=8,
