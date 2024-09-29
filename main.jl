@@ -128,7 +128,7 @@ function objective(;
             reshape(ŷ[:, :, :, idx], 64, :),
             reshape(y[:, :, :, idx], 64, :),
             reshape(x[:, :, 1, :, idx], 64, :),
-        )
+        ) |> cpu_device()
         fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
         savefig(fig, "./artifacts/predictions_$(idx)_step.png")
         logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
