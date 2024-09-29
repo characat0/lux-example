@@ -16,7 +16,7 @@ include("./recurrent/convlstm.jl")
 
 mlf = MLFlow()
 experiment = getorcreateexperiment(mlf, "lux-mnist")
-run_info = createrun(mlf, experiment)
+
 
 const lossfn = MSELoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
@@ -38,7 +38,9 @@ function get_dataloaders()
     )
 end
 
-function objective(;
+
+function objective(
+    run_info;
     k_x,
     k_h,
     hidden,
@@ -46,7 +48,7 @@ function objective(;
     eta,
     lambda,
     n_steps,
-    )
+)
     dev = gpu_device()
     train_loader, val_loader = get_dataloaders() .|> dev
     steps = [1, 3, 5, 10]
@@ -122,7 +124,7 @@ function objective(;
 
     st_ = Lux.testmode(train_state.states)
     ŷ, st_ = model(x, train_state.parameters, st_)
-    
+
     for idx in [1, 3, 7, 8, 9]
         data_to_plot = vcat(
             reshape(ŷ[:, :, :, idx], 64, :),
@@ -136,18 +138,24 @@ function objective(;
     updaterun(mlf, run_info, "FINISHED")
 end
 
-
-try
-    objective(;
-        k_h=5,
-        k_x=5,
-        hidden=8,
-        seed=42,
-        eta=4e-3,
-        lambda=4e-3,
-        n_steps=20,
-    )
-catch
-    updaterun(mlf, run_info, "FAILED")
-    rethrow()
+function objective(; kwargs...)
+    run_info = createrun(mlf, experiment)
+    @show run_info.info.run_name
+    try
+        objective(run_info; kwargs...)
+    catch
+        updaterun(mlf, run_info, "FAILED")
+        rethrow()
+    end
 end
+
+
+objective(;
+    k_h=5,
+    k_x=5,
+    hidden=8,
+    seed=42,
+    eta=4e-3,
+    lambda=4e-3,
+    n_steps=20,
+)
