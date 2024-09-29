@@ -55,6 +55,10 @@ function plot_predictions(model, train_state, data, run_info, epoch)
     end
 end
 
+function struct_to_dict(s)
+    Dict(fieldnames(typeof(s)) .=> getfield.(Ref(s), fieldnames(typeof(s))))
+end
+
 
 function objective(
     run_info;
@@ -77,18 +81,18 @@ function objective(
     logartifact(mlf, run_info, "./artifacts/model_config.jld2")
     rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
+    opt = RMSProp(; eta, rho)
     logparam(mlf, run_info, Dict(
         "rand.algo" => "Xoshiro",
         "rand.seed" => seed,
-        "opt.algo" => "AdamW",
-        "opt.rho" => rho,
-        "opt.eta" => eta,
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
+        "opt.algo" => string(typeof(opt)),
+        Dict(["opt.$(k)" => v for (k, v) in struct_to_dict(opt)])...
     ))
 
-    train_state = Training.TrainState(model, ps, st, RMSProp(; eta, rho))
+    train_state = Training.TrainState(model, ps, st, opt)
     @info "Starting train"
     for epoch in 1:n_steps
         ## Train the model
