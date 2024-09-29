@@ -45,6 +45,7 @@ function objective(;
     seed,
     eta,
     lambda,
+    n_steps,
     )
     dev = gpu_device()
     train_loader, val_loader = get_dataloaders() .|> dev
@@ -68,7 +69,7 @@ function objective(;
 
     train_state = Training.TrainState(model, ps, st, AdamW(; eta, lambda))
     @info "Starting train"
-    for epoch in 1:20
+    for epoch in 1:n_steps
         ## Train the model
         progress = Progress(length(train_loader); desc="Training Epoch $(epoch)")
         losses = Float32[]
@@ -144,6 +145,7 @@ try
         seed=42,
         eta=4e-3,
         lambda=1e-2,
+        n_steps=20,
     )
 catch
     updaterun(mlf, run_info, "FAILED")
