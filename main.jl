@@ -52,19 +52,19 @@ function main()
     rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
     eta = 4e-3
-    rho = 0.9
+    lambda = 1e-2
     logparam(mlf, run_info, Dict(
         "rand.algo" => "Xoshiro",
         "rand.seed" => seed,
-        "opt.algo" => "RMSProp",
+        "opt.algo" => "AdamW",
+        "opt.lambda" => lambda,
         "opt.eta" => eta,
-        "opt.rho" => rho,
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
     ))
 
-    train_state = Training.TrainState(model, ps, st, RMSProp(eta, rho))
+    train_state = Training.TrainState(model, ps, st, AdamW(; eta, lambda))
     @info "Starting train"
     for epoch in 1:20
         ## Train the model
