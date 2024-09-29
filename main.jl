@@ -7,6 +7,7 @@ using ProgressMeter
 using MLFlowClient
 using JLD2
 using Statistics
+using Plots
 
 mkpath("./artifacts")
 
@@ -37,13 +38,16 @@ function get_dataloaders()
     )
 end
 
-function main()
+function objective(;
+    k_x,
+    k_h,
+    hidden,
+    seed,
+    eta,
+    lambda,
+    )
     dev = gpu_device()
     train_loader, val_loader = get_dataloaders() .|> dev
-    k_h = 5
-    k_x = 5
-    hidden = 8
-    seed = 42
     steps = [1, 3, 5, 10]
 
     model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, σ)
@@ -51,8 +55,6 @@ function main()
     logartifact(mlf, run_info, "./artifacts/model_config.jld2")
     rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
-    eta = 4e-3
-    lambda = 1e-2
     logparam(mlf, run_info, Dict(
         "rand.algo" => "Xoshiro",
         "rand.seed" => seed,
@@ -112,39 +114,38 @@ function main()
         @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
         logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
     end
-    return (model, train_state.parameters, train_state.states) |> cpu_device()
+
+    ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
+    @save "./artifacts/trained_model.jld2" ps_trained st_trained
+    x, y = first(val_loader)
+
+    st_ = Lux.testmode(st_trained)
+    ŷ, st_ = model(x, ps_trained, st_)
+    
+    for idx in [1, 3, 7, 8, 9]
+        data_to_plot = vcat(
+            reshape(ŷ[:, :, :, idx], 64, :),
+            reshape(y[:, :, :, idx], 64, :),
+            reshape(x[:, :, 1, :, idx], 64, :),
+        )
+        fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
+        savefig(fig, "./artifacts/predictions_$(idx)_step.png")
+        logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
+    end
+    updaterun(mlf, run_info, "FINISHED")
 end
 
 
 try
-    global model, ps_trained, st_trained = main()
+    main(;
+        k_h=5,
+        k_x=5,
+        hidden=8,
+        seed=42,
+        eta=4e-3,
+        lambda=1e-2,
+    )
 catch
     updaterun(mlf, run_info, "FAILED")
     rethrow()
 end
-
-@save "./artifacts/trained_model.jld2" ps_trained st_trained
-
-logartifact(mlf, run_info, "./artifacts/trained_model.jld2")
-
-using Plots
-
-_, val_loader = get_dataloaders()
-
-x, y = first(val_loader)
-
-st_ = Lux.testmode(st_trained)
-ŷ, st_ = model(x, ps_trained, st_)
-
-for idx in [1, 3, 7, 8, 9]
-    data_to_plot = vcat(
-        reshape(ŷ[:, :, :, idx], 64, :),
-        reshape(y[:, :, :, idx], 64, :),
-        reshape(x[:, :, 1, :, idx], 64, :),
-    )
-    fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
-    savefig(fig, "./artifacts/predictions_$(idx)_step.png")
-    logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
-end
-
-updaterun(mlf, run_info, "FINISHED")
