@@ -120,8 +120,8 @@ function objective(;
     @save "./artifacts/trained_model.jld2" ps_trained st_trained
     x, y = first(val_loader)
 
-    st_ = Lux.testmode(st_trained)
-    ŷ, st_ = model(x, ps_trained, st_)
+    st_ = Lux.testmode(train_state.states)
+    ŷ, st_ = model(x, train_state.parameters, st_)
     
     for idx in [1, 3, 7, 8, 9]
         data_to_plot = vcat(
