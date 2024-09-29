@@ -18,7 +18,7 @@ mlf = MLFlow()
 experiment = getorcreateexperiment(mlf, "lux-mnist")
 
 
-const lossfn = MSELoss()
+const lossfn = BinaryCrossEntropyLoss(logits=Val(true))
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
@@ -55,7 +55,7 @@ function objective(
     train_loader, val_loader = get_dataloaders() .|> dev
     steps = [1, 3, 5, 10]
 
-    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, σ)
+    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
     @save "./artifacts/model_config.jld2" model
     logartifact(mlf, run_info, "./artifacts/model_config.jld2")
     rng = Xoshiro(seed)
@@ -69,6 +69,7 @@ function objective(
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
+        "loss.algo" => string(typeof(lossfn)),
     ))
 
     train_state = Training.TrainState(model, ps, st, AdamW(; eta, lambda))
