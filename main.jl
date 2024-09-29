@@ -114,8 +114,10 @@ function main()
     end
     return (model, train_state.parameters, train_state.states) |> cpu_device()
 end
+
+
 try
-    model, ps_trained, st_trained = main()
+    global model, ps_trained, st_trained = main()
 catch
     updaterun(mlf, run_info, "FAILED")
     rethrow()
