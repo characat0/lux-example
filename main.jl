@@ -144,7 +144,7 @@ try
         hidden=8,
         seed=42,
         eta=4e-3,
-        lambda=1e-2,
+        lambda=2e-2,
         n_steps=20,
     )
 catch
