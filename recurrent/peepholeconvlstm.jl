@@ -134,7 +134,7 @@ function (lstm::ConvLSTMCell)((x, (hiddenₙ, memoryₙ))::_ConvLSTMInputType, p
         forget₂ = @. sigmoid_fast(Conv_xf₂ + Conv_hfₙ)
     end
 
-    memory₂ = @. forget₂ * memoryₙ + input₂ * tanh_fast(Conv_xc₂ .+ Conv_hcₙ)
+    memory₂ = @. forget₂ * memoryₙ + input₂ * tanh_fast(Conv_xc₂ + Conv_hcₙ)
 
     if Lux.known(lstm.peephole)
         output₂ = @. sigmoid_fast(Conv_xo₂ + Conv_hoₙ + ps.Wc_o * memory₂)

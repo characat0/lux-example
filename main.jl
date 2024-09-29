@@ -8,6 +8,9 @@ using MLFlowClient
 using JLD2
 using Statistics
 
+mkpath("./artifacts")
+
+
 include("./recurrent/convlstm.jl")
 
 mlf = MLFlow()
@@ -48,11 +51,12 @@ function main()
     logartifact(mlf, run_info, "./artifacts/model_config.jld2")
     rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
-    eta = 3e-4
+    eta = 4e-3
     rho = 0.9
     logparam(mlf, run_info, Dict(
         "rand.algo" => "Xoshiro",
         "rand.seed" => seed,
+        "opt.algo" => "RMSProp",
         "opt.eta" => eta,
         "opt.rho" => rho,
         "model.kernel_hidden" => k_h,
@@ -62,7 +66,7 @@ function main()
 
     train_state = Training.TrainState(model, ps, st, RMSProp(eta, rho))
     @info "Starting train"
-    for epoch in 1:40
+    for epoch in 1:20
         ## Train the model
         progress = Progress(length(train_loader); desc="Training Epoch $(epoch)")
         losses = Float32[]
@@ -133,8 +137,8 @@ for idx in [1, 3, 7, 8, 9]
         reshape(x[:, :, 1, :, idx], 64, :),
     )
     fig = heatmap(data_to_plot, size=(128*10, 128*3), clims=(0, 1))
-    savefig(fig, "./artifacts/predictions_$(idx).png")
-    logartifact(mlf, run_info, "./artifacts/predictions_$(idx).png")
+    savefig(fig, "./artifacts/predictions_$(idx)_step.png")
+    logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
 end
 
 updaterun(mlf, run_info, "FINISHED")

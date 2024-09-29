@@ -25,15 +25,19 @@ function ConvLSTM(
 ) where {N}
     return ConvLSTM(
         Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true)),
-        ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims, peephole=true),
-        Conv(ntuple(Returns(1), N), hidden_dims => out_dims, activation, use_bias=false),
+        ConvLSTMCell(k_x, k_h, (hidden_dims + 1) => (hidden_dims + 1), peephole=true),
+        Conv(ntuple(Returns(1), N), (hidden_dims + 1) => out_dims, activation, use_bias=false),
         steps
     )
 end
 
+# WHCTN
 function (c::ConvLSTM)(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
     (y, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
-    (ys, carry), st_decoder = c.decoder((y, carry), ps.decoder, st.decoder)
+    x_last = selectdim(x, N-1, size(x, N-1))
+    dev = get_device(x_last)
+    carry = cat(first(carry), dev(zeros32(size(x_last)...)); dims=Val(N-2)), cat(last(carry), dev(zeros32(size(x_last)...)); dims=Val(N-2))
+    (ys, carry), st_decoder = c.decoder((cat(y, x_last; dims=Val(N-2)), carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = reshape(output, size(output)[1:N-2]..., :)
     for _ in 2:c.steps
