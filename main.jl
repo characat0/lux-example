@@ -41,6 +41,7 @@ end
 
 function objective(
     run_info;
+    device_id=1,
     k_x,
     k_h,
     hidden,
@@ -49,7 +50,7 @@ function objective(
     lambda,
     n_steps,
 )
-    dev = gpu_device()
+    dev = gpu_device(device_id, force_gpu_usage=true)
     train_loader, val_loader = get_dataloaders() .|> dev
     steps = [1, 3, 5, 10]
 
