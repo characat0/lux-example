@@ -135,7 +135,6 @@ function objective(
         savefig(fig, "./artifacts/predictions_$(idx)_step.png")
         logartifact(mlf, run_info, "./artifacts/predictions_$(idx)_step.png")
     end
-    updaterun(mlf, run_info, "FINISHED")
 end
 
 function objective(; kwargs...)
@@ -143,6 +142,7 @@ function objective(; kwargs...)
     @show run_info.info.run_name
     try
         objective(run_info; kwargs...)
+        updaterun(mlf, run_info, "FINISHED")
     catch
         updaterun(mlf, run_info, "FAILED")
         rethrow()
