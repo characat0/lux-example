@@ -22,7 +22,7 @@ const lossfn = MSELoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
-function get_dataloaders()
+function get_dataloaders(batchsize)
     ds = npzread("mnist_test_seq.npy")::Array{UInt8, 4} / Float32(typemax(UInt8))
     ds = permutedims(ds, (3, 4, 1, 2))#[:, :, :, 1:1_000]
     ds_x = reshape(ds[:, :, 1:10, :], (64, 64, 1, 10, :))
@@ -33,8 +33,8 @@ function get_dataloaders()
     (x_train, y_train), (x_val, y_val) = splitobs((ds_x, ds_y); at=0.8)
 
     return (
-        DataLoader((x_train, y_train); batchsize=32),
-        DataLoader((x_val, y_val); batchsize=32),
+        DataLoader((x_train, y_train); batchsize),
+        DataLoader((x_val, y_val); batchsize),
     )
 end
 
@@ -71,9 +71,10 @@ function objective(
     eta,
     rho,
     n_steps,
+    batchsize=32,
 )
     dev = gpu_device(device_id, force_gpu_usage=true)
-    train_loader, val_loader = get_dataloaders() .|> dev
+    train_loader, val_loader = get_dataloaders(batchsize) |> dev
     steps = [1, 3, 5, 10]
 
     model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
@@ -175,4 +176,5 @@ objective(;
     eta=0.001,
     rho=0.9,
     n_steps=20,
+    batchsize=16,
 )
