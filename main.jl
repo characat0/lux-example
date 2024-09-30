@@ -137,11 +137,10 @@ function objective(
             logmetric(mlf, run_info, "loss_test.$(s)", mean(loss_at[s]); step=epoch)
         end
 
-        ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
-        @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
-        logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
-
         if ((epoch - 1) % 4 == 0) || (epoch == n_steps)
+            ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
+            @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
+            logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
             plot_predictions(model, train_state, first(val_loader), run_info, epoch)
         end
     end
