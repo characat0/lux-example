@@ -173,7 +173,7 @@ objective(;
     hidden=128,
     seed=42,
     eta=4e-3,
-    rho=0.8,
+    rho=0.95,
     n_steps=20,
     batchsize=16,
 )
