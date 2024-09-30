@@ -139,8 +139,8 @@ function objective(
 
         if ((epoch - 1) % 4 == 0) || (epoch == n_steps)
             ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
-            @save "./artifacts/trained_weights_$(epoch).jld2" ps_trained st_trained
-            logartifact(mlf, run_info, "./artifacts/trained_weights_$(epoch).jld2")
+            @save "./artifacts/trained_weights_$(lpad(epoch, 2, '0')).jld2" ps_trained st_trained
+            logartifact(mlf, run_info, "./artifacts/trained_weights_$(lpad(epoch, 2, '0')).jld2")
             plot_predictions(model, train_state, first(val_loader), run_info, epoch)
         end
     end
