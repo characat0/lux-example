@@ -89,6 +89,7 @@ function objective(
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
+        Dict(["rng.$(k)" => v for (k, v) in struct_to_dict(rng)])...,
         "opt.algo" => string(typeof(opt)),
         Dict(["opt.$(k)" => v for (k, v) in struct_to_dict(opt)])...
     ))
