@@ -84,11 +84,11 @@ function objective(
     ps, st = Lux.setup(rng, model) |> dev
     opt = RMSProp(; eta, rho)
     logparam(mlf, run_info, Dict(
-        "rand.algo" => "Xoshiro",
-        "rand.seed" => seed,
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
+        "rng.algo" => string(typeof(rng)),
+        "rng.seed" => seed,
         Dict(["rng.$(k)" => v for (k, v) in struct_to_dict(rng)])...,
         "opt.algo" => string(typeof(opt)),
         Dict(["opt.$(k)" => v for (k, v) in struct_to_dict(opt)])...
@@ -98,7 +98,7 @@ function objective(
     @info "Starting train"
     for epoch in 1:n_steps
         ## Train the model
-        progress = Progress(length(train_loader); desc="Training Epoch $(epoch)", enabled=logging)
+        progress = Progress(length(train_loader); desc="Training Epoch $(epoch)", enabled=logging, barlen=32)
         losses = Float32[]
         for (x, y) in train_loader
             (_, loss, _, train_state) = Training.single_train_step!(
@@ -111,7 +111,7 @@ function objective(
         losses = Float32[]
         accuracies = Float32[]
         ## Validate the model
-        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)", enabled=logging)
+        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)", enabled=logging, barlen=32)
         st_ = Lux.testmode(train_state.states)
         loss_at = Dict{Int, Vector{Float32}}()
         acc_at = Dict{Int, Vector{Float32}}()
