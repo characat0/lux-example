@@ -111,7 +111,7 @@ function objective(
         losses = Float32[]
         accuracies = Float32[]
         ## Validate the model
-        progress = Progress(length(val_loader); desc="Training Epoch $(epoch)", enabled=logging, barlen=32)
+        progress = Progress(length(val_loader); desc="Testing Epoch $(epoch)", enabled=logging, barlen=32)
         st_ = Lux.testmode(train_state.states)
         loss_at = Dict{Int, Vector{Float32}}()
         acc_at = Dict{Int, Vector{Float32}}()
