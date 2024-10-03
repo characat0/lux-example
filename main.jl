@@ -8,6 +8,7 @@ using MLFlowClient
 using JLD2
 using Statistics
 using Plots
+using DrWatson
 
 mkpath("./artifacts")
 
@@ -150,8 +151,23 @@ function objective(
 end
 
 function objective(; kwargs...)
-    run_info = createrun(mlf, experiment)
+    d = tag!(Dict{Symbol, Any}(), storepatch=true, commit_message=true)
+    tags = [
+        Dict("key" => "mlflow.source.git.commit", "value" => string(chopsuffix(d[:gitcommit], "-dirty"))),
+        Dict("key" => "mlflow.source.name", "value" => "https://github.com/characat0/lux-example"),
+        Dict("key" => "mlflow.source.type", "value" => "git"),
+        Dict("key" => "mlflow.source.branch", "value" => "main"),
+        Dict("key" => "mlflow.note.content", "value" => "Commit message: $(string(d[:gitmessage]))"),
+        Dict("key" => "is_dirty", "value" => string(endswith(d[:gitcommit], "-dirty"))),
+    ]
+    @show tags
+    run_info = createrun(mlf, experiment; tags=tags)
     @show run_info.info.run_name
+    if haskey(d, :gitpatch)
+        f = "$(tempdir())/head.patch"
+        write(f, d[:gitpatch])
+        logartifact(mlf, run_info, f)
+    end
     try
         objective(run_info; kwargs...)
         updaterun(mlf, run_info, "FINISHED")
@@ -159,6 +175,9 @@ function objective(; kwargs...)
         if typeof(e) <: InterruptException
             updaterun(mlf, run_info, "KILLED")
         else
+            f = "$(tempdir())/error.log"
+            write(f, string(e))
+            logartifact(mlf, run_info, f)
             updaterun(mlf, run_info, "FAILED")
         end
         rethrow()
@@ -171,7 +190,7 @@ objective(;
     k_x=5,
     hidden=64,
     seed=42,
-    eta=4e-3,
+    eta=1e-3,
     rho=0.9,
     n_steps=30,
     batchsize=16,
