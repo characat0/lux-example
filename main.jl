@@ -74,13 +74,15 @@ function objective(
     n_steps,
     batchsize=32,
 )
+    tmp_location = mktempdir()
+    @show tmp_location
     dev = gpu_device(device_id, force_gpu_usage=true)
     train_loader, val_loader = get_dataloaders(batchsize) |> dev
     steps = [1, 3, 5, 10]
 
     model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
-    @save "./artifacts/model_config.jld2" model
-    logartifact(mlf, run_info, "./artifacts/model_config.jld2")
+    @save "$(tmp_location)/model_config.jld2" model
+    logartifact(mlf, run_info, "$(tmp_location)/model_config.jld2")
     rng = Xoshiro(seed)
     ps, st = Lux.setup(rng, model) |> dev
     opt = RMSProp(; eta, rho)
@@ -143,8 +145,8 @@ function objective(
 
         if ((epoch - 1) % 4 == 0) || (epoch == n_steps)
             ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
-            @save "./artifacts/trained_weights_$(lpad(epoch, 2, '0')).jld2" ps_trained st_trained
-            logartifact(mlf, run_info, "./artifacts/trained_weights_$(lpad(epoch, 2, '0')).jld2")
+            @save "$(tmp_location)/trained_weights_$(lpad(epoch, 2, '0')).jld2" ps_trained st_trained
+            logartifact(mlf, run_info, "$(tmp_location)/trained_weights_$(lpad(epoch, 2, '0')).jld2")
             plot_predictions(model, train_state, first(val_loader), run_info, epoch)
         end
     end
@@ -160,11 +162,11 @@ function objective(; kwargs...)
         Dict("key" => "mlflow.note.content", "value" => "Commit message: $(string(d[:gitmessage]))"),
         Dict("key" => "is_dirty", "value" => string(endswith(d[:gitcommit], "-dirty"))),
     ]
-    @show tags
     run_info = createrun(mlf, experiment; tags=tags)
     @show run_info.info.run_name
+    tmpfolder = mktempdir()
     if haskey(d, :gitpatch)
-        f = "$(tempdir())/head.patch"
+        f = "$(tmpfolder)/head.patch"
         write(f, d[:gitpatch])
         logartifact(mlf, run_info, f)
     end
@@ -175,8 +177,8 @@ function objective(; kwargs...)
         if typeof(e) <: InterruptException
             updaterun(mlf, run_info, "KILLED")
         else
-            f = "$(tempdir())/error.log"
-            write(f, string(e))
+            f = "$(tmpfolder)/error.log"
+            write(f, sprint(showerror, e))
             logartifact(mlf, run_info, f)
             updaterun(mlf, run_info, "FAILED")
         end
