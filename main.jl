@@ -9,6 +9,7 @@ using JLD2
 using Statistics
 using Plots
 using DrWatson
+using Dates
 
 mkpath("./artifacts")
 
@@ -19,7 +20,7 @@ mlf = MLFlow()
 experiment = getorcreateexperiment(mlf, "lux-mnist")
 
 
-const lossfn = BinaryFocalLoss()
+const lossfn = MSELoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
@@ -102,6 +103,10 @@ function objective(
     train_state = Training.TrainState(model, ps, st, opt)
     @info "Starting train"
     for epoch in 1:n_steps
+        if epoch % 8 == 0
+            @info "Learning Rate decay"
+            train_state = Optimisers.adjust!(train_state, train_state.optimizer.eta * 1/2)
+        end
         ## Train the model
         progress = Progress(length(train_loader); desc="Training Epoch $(epoch)", enabled=logging, barlen=32)
         losses = Float32[]
@@ -175,12 +180,12 @@ function objective(; kwargs...)
         updaterun(mlf, run_info, "FINISHED")
     catch e
         if typeof(e) <: InterruptException
-            updaterun(mlf, run_info, "KILLED")
+            updaterun(mlf, run_info, "KILLED"; end_time=string(Int(trunc(datetime2unix(now(UTC)) * 1000))))
         else
             f = "$(tmpfolder)/error.log"
             write(f, sprint(showerror, e))
             logartifact(mlf, run_info, f)
-            updaterun(mlf, run_info, "FAILED")
+            updaterun(mlf, run_info, "FAILED"; end_time=string(Int(trunc(datetime2unix(now(UTC)) * 1000))))
         end
         rethrow()
     end
@@ -190,10 +195,10 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=64,
+    hidden=128,
     seed=42,
-    eta=1e-3,
-    rho=0.9,
+    eta=8e-3,
+    rho=0.95,
     n_steps=30,
     batchsize=16,
 )
