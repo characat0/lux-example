@@ -18,7 +18,7 @@ mlf = MLFlow()
 experiment = getorcreateexperiment(mlf, "lux-mnist")
 
 
-const lossfn = MSELoss()
+const lossfn = BinaryFocalLoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
@@ -87,8 +87,10 @@ function objective(
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
+        "model.batchsize" => batchsize,
         "rng.algo" => string(typeof(rng)),
         "rng.seed" => seed,
+        "loss.algo" => string(typeof(lossfn)),
         Dict(["rng.$(k)" => v for (k, v) in struct_to_dict(rng)])...,
         "opt.algo" => string(typeof(opt)),
         Dict(["opt.$(k)" => v for (k, v) in struct_to_dict(opt)])...
@@ -145,10 +147,6 @@ function objective(
             plot_predictions(model, train_state, first(val_loader), run_info, epoch)
         end
     end
-
-    ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
-    @save "./artifacts/trained_model.jld2" ps_trained st_trained
-    logartifact(mlf, run_info, "./artifacts/trained_model.jld2")
 end
 
 function objective(; kwargs...)
@@ -171,10 +169,10 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=128,
+    hidden=64,
     seed=42,
     eta=4e-3,
-    rho=0.95,
-    n_steps=20,
+    rho=0.9,
+    n_steps=30,
     batchsize=16,
 )

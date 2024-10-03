@@ -21,7 +21,7 @@ function ConvLSTM(
     k_h::NTuple{N},
     in_dims, hidden_dims, out_dims,
     steps,
-    activation=identity,
+    activation=σ,
 ) where {N}
     return ConvLSTM(
         Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true)),
