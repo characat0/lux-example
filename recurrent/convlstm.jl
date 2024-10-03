@@ -19,13 +19,15 @@ end
 function ConvLSTM(
     k_x::NTuple{N},
     k_h::NTuple{N},
-    in_dims, hidden_dims, out_dims,
+    in_dims, 
+    hidden_dims, 
+    out_dims,
     steps,
     activation=σ,
 ) where {N}
     return ConvLSTM(
-        Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true)),
-        ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims, peephole=true, use_bias=false),
+        Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false)),
+        ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
         Conv(ntuple(Returns(1), N), hidden_dims => out_dims, activation, use_bias=false),
         steps
     )
@@ -33,12 +35,14 @@ end
 
 # WHCTN
 function (c::ConvLSTM)(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
-    (y, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
-    (ys, carry), st_decoder = c.decoder((y, carry), ps.decoder, st.decoder)
+    (_, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
+    y_in = glorot_uniform(Lux.replicate(st_encoder.rng), size(x)[1:N-2]..., size(x, N)) |> get_device(x)
+    (ys, carry), st_decoder = c.decoder((y_in, carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = reshape(output, size(output)[1:N-2]..., :)
     for _ in 2:c.steps
-        (ys, carry), st_decoder = c.decoder((ys, carry), ps.decoder, st_decoder)
+        y_in = glorot_uniform(Lux.replicate(st_decoder.rng), size(x)[1:N-2]..., size(x, N)) |> get_device(x)
+        (ys, carry), st_decoder = c.decoder((y_in, carry), ps.decoder, st_decoder)
         output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
         out = cat(out, output; dims=Val(N-2))
     end
