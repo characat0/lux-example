@@ -10,6 +10,7 @@ using Statistics
 using Plots
 using DrWatson
 using Dates
+using Accessors
 
 mkpath("./artifacts")
 
@@ -27,12 +28,13 @@ accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 function get_dataloaders(batchsize)
     ds = npzread("mnist_test_seq.npy")::Array{UInt8, 4} / Float32(typemax(UInt8))
     ds = permutedims(ds, (3, 4, 1, 2))#[:, :, :, 1:1_000]
-    ds_x = reshape(ds[:, :, 1:10, :], (64, 64, 1, 10, :))
+    ds_x = reshape(ds[:, :, 1:20, :], (64, 64, 1, 20, :))
     ds_y = ds[:, :, 11:20, :]
     @show size(ds_x)
     @show size(ds_y)
 
     (x_train, y_train), (x_val, y_val) = splitobs((ds_x, ds_y); at=0.8)
+    x_val = x_val[:, :, :, 1:10, :]
 
     return (
         DataLoader((x_train, y_train); batchsize),
@@ -82,6 +84,7 @@ function objective(
     steps = [1, 3, 5, 10]
 
     model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
+    model_test = @set model.teacher = False()
     @save "$(tmp_location)/model_config.jld2" model
     logartifact(mlf, run_info, "$(tmp_location)/model_config.jld2")
     rng = Xoshiro(seed)
@@ -130,7 +133,7 @@ function objective(
             acc_at[s] = Float32[]
         end
         for (x, y) in val_loader
-            ŷ, st_ = model(x, train_state.parameters, st_)
+            ŷ, st_ = model_test(x, train_state.parameters, st_)
             loss = lossfn(ŷ, y)
             acc = accuracy(ŷ, y)
             for s in steps
@@ -152,7 +155,7 @@ function objective(
             ps_trained, st_trained = (train_state.parameters, train_state.states) |> cpu_device()
             @save "$(tmp_location)/trained_weights_$(lpad(epoch, 2, '0')).jld2" ps_trained st_trained
             logartifact(mlf, run_info, "$(tmp_location)/trained_weights_$(lpad(epoch, 2, '0')).jld2")
-            plot_predictions(model, train_state, first(val_loader), run_info, epoch)
+            plot_predictions(model_test, train_state, first(val_loader), run_info, epoch)
         end
     end
 end
@@ -195,10 +198,10 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=128,
+    hidden=64,
     seed=42,
     eta=8e-3,
-    rho=0.95,
+    rho=0.85,
     n_steps=30,
     batchsize=16,
 )
