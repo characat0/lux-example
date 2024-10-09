@@ -53,14 +53,15 @@ end
 
 # WHCTN
 function (c::ConvLSTM{True})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
-    X = selectdim(x, N-1, 1:(size(x, N-1) - c.steps))
+    N_end = (size(x, N-1) - c.steps)
+    X = selectdim(x, N-1, 1:N_end)
     (_, carry), st_encoder = c.encoder(X, ps.encoder, st.encoder)
-    Xi = selectdim(x, N-1, (size(x, N-1) - c.steps))
+    Xi = selectdim(x, N-1, N_end)
     (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = output
-    for i in (size(x, N-1) - c.steps)+1:size(x, N-1)-1
-        Xi = selectdim(x, N-1, i)
+    for i in 1:c.steps-1
+        Xi = selectdim(x, N-1, N_end+i)
         (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st_decoder)
         output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
         out = cat(out, output; dims=Val(N-2))
