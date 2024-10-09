@@ -21,7 +21,7 @@ mlf = MLFlow()
 experiment = getorcreateexperiment(mlf, "lux-mnist")
 
 
-const lossfn = MSELoss()
+const lossfn = BinaryFocalLoss()
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 
@@ -106,10 +106,10 @@ function objective(
     train_state = Training.TrainState(model, ps, st, opt)
     @info "Starting train"
     for epoch in 1:n_steps
-        if epoch % 8 == 0
-            @info "Learning Rate decay"
-            train_state = Optimisers.adjust!(train_state, train_state.optimizer.eta * 1/2)
-        end
+        # if epoch % 8 == 0
+        #     @info "Learning Rate decay"
+        #     train_state = Optimisers.adjust!(train_state, train_state.optimizer.eta * 1/2)
+        # end
         ## Train the model
         progress = Progress(length(train_loader); desc="Training Epoch $(epoch)", enabled=logging, barlen=32)
         losses = Float32[]
@@ -200,8 +200,8 @@ objective(;
     k_x=5,
     hidden=64,
     seed=42,
-    eta=8e-3,
-    rho=0.85,
+    eta=1e-3,
+    rho=0.99,
     n_steps=30,
     batchsize=16,
 )
