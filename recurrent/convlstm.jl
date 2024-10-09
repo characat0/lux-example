@@ -57,12 +57,13 @@ function (c::ConvLSTM{True})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTu
     X = selectdim(x, N-1, 1:N_end)
     (_, carry), st_encoder = c.encoder(X, ps.encoder, st.encoder)
     Xi = selectdim(x, N-1, N_end)
+    Xi = zeros32(size(Xi)...) |> get_device(Xi)
     (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = output
     for i in 1:c.steps-1
-        Xi = selectdim(x, N-1, N_end+i)
-        (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st_decoder)
+        # Xi = selectdim(x, N-1, N_end+i)
+        (ys, carry), st_decoder = c.decoder((output, carry), ps.decoder, st_decoder)
         output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
         out = cat(out, output; dims=Val(N-2))
     end
