@@ -75,7 +75,7 @@ function objective(
     eta,
     rho,
     n_steps,
-    batchsize=32,
+    batchsize,
 )
     tmp_location = mktempdir()
     @show tmp_location
@@ -198,10 +198,10 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=64,
+    hidden=128,
     seed=42,
-    eta=1e-3,
-    rho=0.99,
+    eta=3e-4,
+    rho=0.9,
     n_steps=30,
     batchsize=16,
 )
