@@ -25,21 +25,22 @@ function ConvLSTM(
     hidden_dims, 
     out_dims,
     steps,
+    use_bias,
     activation=σ,
 ) where {N}
     return ConvLSTM(
         True(),
         Recurrence(
             StackedConvLSTMCell(
-                ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
-                ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=false),
-                ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=false),
+                ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=use_bias),
+                ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
+                ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
             ),
         ),
         StackedConvLSTMCell(
-            ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
-            ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=false),
-            ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=false),
+            ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=use_bias),
+            ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
+            ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
             concatenate=True(),
         ),
         Conv(ntuple(Returns(1), N), hidden_dims * 2 => out_dims, activation, use_bias=false),

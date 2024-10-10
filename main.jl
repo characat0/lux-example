@@ -76,6 +76,7 @@ function objective(
     rho,
     n_steps,
     batchsize,
+    use_bias,
 )
     tmp_location = mktempdir()
     @show tmp_location
@@ -83,7 +84,7 @@ function objective(
     train_loader, val_loader = get_dataloaders(batchsize) |> dev
     steps = [1, 3, 5, 10]
 
-    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10)
+    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, use_bias)
     model_test = @set model.teacher = False()
     @save "$(tmp_location)/model_config.jld2" model
     logartifact(mlf, run_info, "$(tmp_location)/model_config.jld2")
@@ -95,6 +96,7 @@ function objective(
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
         "model.batchsize" => batchsize,
+        "model.use_bias" => use_bias,
         "rng.algo" => string(typeof(rng)),
         "rng.seed" => seed,
         "loss.algo" => string(typeof(lossfn)),
@@ -198,11 +200,12 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=64,
+    hidden=16,
     seed=42,
     eta=3e-4,
     rho=0.9,
     n_steps=30,
     batchsize=8,
+    use_bias=true,
 )
 
