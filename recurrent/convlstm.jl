@@ -1,4 +1,5 @@
 include("./peepholeconvlstm.jl")
+include("./stacked.jl")
 
 
 struct ConvLSTM{Teacher, E, D, C} <: Lux.AbstractLuxContainerLayer{(:encoder, :decoder, :last_conv)}
@@ -28,9 +29,19 @@ function ConvLSTM(
 ) where {N}
     return ConvLSTM(
         True(),
-        Recurrence(ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false)),
-        ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
-        Conv(ntuple(Returns(1), N), hidden_dims => out_dims, activation, use_bias=false),
+        Recurrence(
+            StackedConvLSTMCell(
+                ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
+                ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=false),
+                ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=false),
+            ),
+        ),
+        StackedConvLSTMCell(
+            ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
+            ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=false),
+            ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=false),
+        ),
+        Conv(ntuple(Returns(1), N), hidden_dims ÷ 2 => out_dims, activation, use_bias=false),
         steps
     )
 end
