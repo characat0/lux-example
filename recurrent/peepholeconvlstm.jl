@@ -148,7 +148,7 @@ end
 
 function Base.show(io::IO, lstm::ConvLSTMCell)
     print(io, "ConvLSTMCell($(lstm.Wx.kernel_size), $(lstm.Wh.kernel_size), $(lstm.Wx.in_chs => lstm.Wx.out_chs)")
-    all(==(0), lstm.Wx.pad) || print(io, ", pad=", Lux.PrettyPrinting.tuple_string(lstm.Wx.pad))
+    # all(==(0), lstm.Wx.pad) || print(io, ", pad=", Lux.PrettyPrinting.tuple_string(lstm.Wx.pad))
     Lux.has_bias(lstm.Wx) || print(io, ", use_bias=false")
     Lux.has_train_state(lstm) && print(io, ", train_state=true")
     Lux.known(lstm.train_memory) && print(io, ", train_memory=true")
