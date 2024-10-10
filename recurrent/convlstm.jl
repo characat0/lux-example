@@ -40,8 +40,9 @@ function ConvLSTM(
             ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=false),
             ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=false),
             ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=false),
+            concatenate=True(),
         ),
-        Conv(ntuple(Returns(1), N), hidden_dims ÷ 2 => out_dims, activation, use_bias=false),
+        Conv(ntuple(Returns(1), N), hidden_dims * 2 => out_dims, activation, use_bias=false),
         steps
     )
 end
@@ -64,8 +65,7 @@ end
 
 # WHCTN
 function (c::ConvLSTM{True})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
-    N_end = (size(x, N-1) - c.steps)
-    X = selectdim(x, N-1, 1:N_end)
+    X = x
     (_, carry), st_encoder = c.encoder(X, ps.encoder, st.encoder)
     Xi = zeros32(size(x)[1:N-2]..., size(x, N)) |> get_device(x)
     (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st.decoder)
