@@ -35,7 +35,7 @@ function ConvLSTMCell(
     hidden_to_hidden = out_chs => out_chs
 
     Wx = Conv(k_i2h, input_to_hidden; init_weight, init_bias, pad=SamePad(), use_bias)
-    Wh = Conv(k_h2h, hidden_to_hidden; init_weight, init_bias, pad=SamePad(), use_bias=False())
+    Wh = Conv(k_h2h, hidden_to_hidden; init_weight, init_bias, pad=SamePad(), use_bias)
 
     return ConvLSTMCell(
         static(train_state), static(train_memory), static(peephole), Wx, Wh, init_state, init_memory,
