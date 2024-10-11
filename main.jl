@@ -28,7 +28,7 @@ accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
 function get_dataloaders(batchsize)
     ds = npzread("mnist_test_seq.npy")::Array{UInt8, 4} / Float32(typemax(UInt8))
     ds = permutedims(ds, (3, 4, 1, 2))#[:, :, :, 1:1_000]
-    ds_x = reshape(ds[:, :, 1:10, :], (size(ds)[1:2]..., 1, 10, :))
+    ds_x = reshape(ds[:, :, 1:20, :], (size(ds)[1:2]..., 1, 20, :))
     ds_y = ds[:, :, 11:20, :]
     @show size(ds_x)
     @show size(ds_y)

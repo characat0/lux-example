@@ -76,15 +76,17 @@ ConvLSTM(
 
 function (c::ConvLSTM{False})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
     (_, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)
-    # y_in = glorot_uniform(Lux.replicate(st_encoder.rng), size(x)[1:N-2]..., size(x, N)) |> get_device(x)
-    output = selectdim(x, N-1, size(x, N-1))
-    (ys, carry), st_decoder = c.decoder((output, carry), ps.decoder, st.decoder)
-    output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
-    out = reshape(output, size(output)[1:N-2]..., :)
+    # Last frame
+    Xi = selectdim(x, N-1, size(x, N-1) + 0)
+
+    (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st.decoder)
+    Xi, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
+    out = Xi
     for _ in 2:c.steps
-        (ys, carry), st_decoder = c.decoder((output, carry), ps.decoder, st_decoder)
-        output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
-        out = cat(out, output; dims=Val(N-2))
+        # Autoregressive part
+        (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st_decoder)
+        Xi, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
+        out = cat(out, Xi; dims=Val(N-2))
     end
     return out, merge(st, (encoder=st_encoder, decoder=st_decoder, last_conv=st_last_conv))
 end
@@ -92,15 +94,21 @@ end
 
 # WHCTN
 function (c::ConvLSTM{True})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
-    X = x
+    N_end = size(x, N-1) - c.steps
+    X = selectdim(x, N-1, 1:N_end)
+
     (_, carry), st_encoder = c.encoder(X, ps.encoder, st.encoder)
-    Xi = zeros32(size(x)[1:N-2]..., size(x, N)) |> get_device(x)
+    # Last frame
+    Xi = selectdim(x, N-1, size(X, N-1) + 0)
+
     (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st.decoder)
     output, st_last_conv = c.last_conv(ys, ps.last_conv, st.last_conv)
     out = output
     for i in 1:c.steps-1
-        # Xi = selectdim(x, N-1, N_end+i)
-        (ys, carry), st_decoder = c.decoder((output, carry), ps.decoder, st_decoder)
+        # Teaching, we ignore the output of the last step, but use instead the correct frame
+        Xi = selectdim(x, N-1, size(X, N-1) + i)
+        # Autoregressive part
+        (ys, carry), st_decoder = c.decoder((Xi, carry), ps.decoder, st_decoder)
         output, st_last_conv = c.last_conv(ys, ps.last_conv, st_last_conv)
         out = cat(out, output; dims=Val(N-2))
     end
