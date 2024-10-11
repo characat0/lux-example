@@ -22,31 +22,57 @@ function ConvLSTM(
     k_x::NTuple{N},
     k_h::NTuple{N},
     in_dims, 
-    hidden_dims, 
+    hidden_dims::NTuple{M}, 
     out_dims,
     steps,
-    use_bias,
+    use_bias::NTuple{M},
+    peephole::NTuple{M},
     activation=σ,
-) where {N}
+) where {N, M}
+    dims = vcat([in_dims], hidden_dims...)
     return ConvLSTM(
         True(),
         Recurrence(
             StackedConvLSTMCell(
-                ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=use_bias),
-                ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
-                ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
+                [
+                    ConvLSTMCell(k_x, k_h, dims[i] => dims[i+1], peephole=peephole[i], use_bias=use_bias[i])
+                    for i in 1:M
+                ]...
             ),
         ),
         StackedConvLSTMCell(
-            ConvLSTMCell(k_x, k_h, in_dims => hidden_dims, peephole=true, use_bias=use_bias),
-            ConvLSTMCell(k_x, k_h, hidden_dims => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
-            ConvLSTMCell(k_x, k_h, hidden_dims ÷ 2 => hidden_dims ÷ 2, peephole=true, use_bias=use_bias),
+            [
+                ConvLSTMCell(k_x, k_h, dims[i] => dims[i+1], peephole=peephole[i], use_bias=use_bias[i])
+                for i in 1:M
+            ]...,
             concatenate=True(),
         ),
-        Conv(ntuple(Returns(1), N), hidden_dims * 2 => out_dims, activation, use_bias=false),
+        Conv(ntuple(Returns(1), N), sum(hidden_dims) => out_dims, activation, use_bias=false),
         steps
     )
 end
+
+ConvLSTM(
+    k_x::NTuple{N},
+    k_h::NTuple{N},
+    in_dims, 
+    hidden_dims::NTuple{M}, 
+    out_dims,
+    steps,
+    use_bias::Bool = false,
+    peephole::Bool = true,
+    activation=σ,
+) where {N, M} = ConvLSTM(
+    k_x,
+    k_h,
+    in_dims, 
+    hidden_dims, 
+    out_dims,
+    steps,
+    ntuple(Returns(use_bias), M),
+    ntuple(Returns(peephole), M),
+    activation,
+)
 
 function (c::ConvLSTM{False})(x::AbstractArray{T, N}, ps::NamedTuple, st::NamedTuple) where {T, N}
     (_, carry), st_encoder = c.encoder(x, ps.encoder, st.encoder)

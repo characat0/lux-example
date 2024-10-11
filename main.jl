@@ -84,7 +84,7 @@ function objective(
     train_loader, val_loader = get_dataloaders(batchsize) |> dev
     steps = [1, 3, 5, 10]
 
-    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, use_bias)
+    model = ConvLSTM((k_x, k_x), (k_h, k_h), 1, hidden, 1, 10, use_bias, (true, true, true))
     model_test = @set model.teacher = False()
     @save "$(tmp_location)/model_config.jld2" model
     logartifact(mlf, run_info, "$(tmp_location)/model_config.jld2")
@@ -92,6 +92,7 @@ function objective(
     ps, st = Lux.setup(rng, model) |> dev
     opt = RMSProp(; eta, rho)
     logparam(mlf, run_info, Dict(
+        "model.depth" => length(hidden),
         "model.kernel_hidden" => k_h,
         "model.kernel_input" => k_x,
         "model.hidden_dims" => hidden,
@@ -200,12 +201,12 @@ end
 objective(;
     k_h=5,
     k_x=5,
-    hidden=16,
+    hidden=(32, 16, 16),
     seed=42,
     eta=3e-4,
     rho=0.9,
     n_steps=30,
     batchsize=8,
-    use_bias=true,
+    use_bias=(true, false, false),
 )
 
