@@ -18,12 +18,24 @@ mkpath("./artifacts")
 include("./recurrent/convlstm.jl")
 
 mlf = MLFlow()
-experiment = getorcreateexperiment(mlf, "lux-mnist")
+const experiment = getorcreateexperiment(mlf, "lux-mnist-final")
 
 
 const lossfn = BinaryFocalLoss()
+
+
 matches(y_pred, y_true) = sum((y_pred .> 0.5f0) .== (y_true .> 0.5f0))
+TP(y_pred, y_true) = sum(@. (y_true > 0.5f0) * (y_pred > 0.5f0))
+TN(y_pred, y_true) = sum(@. (y_true < 0.5f0) * (y_pred < 0.5f0))
+
+FN(y_pred, y_true) = sum(@. (y_true > 0.5f0) * (y_pred < 0.5f0))
+FP(y_pred, y_true) = sum(@. (y_true < 0.5f0) * (y_pred > 0.5f0))
+
+f1(y_pred, y_true) = 2*TP(y_pred, y_true)/(2*TP(y_pred, y_true) + FP(y_pred, y_true) + FN(y_pred, y_true))
+
+
 accuracy(y_pred, y_true) = matches(y_pred, y_true) / length(y_pred)
+
 
 function get_dataloaders(batchsize)
     ds = npzread("mnist_test_seq.npy")::Array{UInt8, 4} / Float32(typemax(UInt8))
@@ -126,32 +138,40 @@ function objective(
         logmetric(mlf, run_info, "loss_train", mean(losses); step=epoch)
         losses = Float32[]
         accuracies = Float32[]
+        f1s = Float32[]
         ## Validate the model
         progress = Progress(length(val_loader); desc="Testing Epoch $(epoch)", enabled=logging, barlen=32)
         st_ = Lux.testmode(train_state.states)
         loss_at = Dict{Int, Vector{Float32}}()
         acc_at = Dict{Int, Vector{Float32}}()
+        f1_at = Dict{Int, Vector{Float32}}()
         for s in steps
             loss_at[s] = Float32[]
             acc_at[s] = Float32[]
+            f1_at[s] = Float32[]
         end
         for (x, y) in val_loader
             ŷ, st_ = model_test(x, train_state.parameters, st_)
             loss = lossfn(ŷ, y)
             acc = accuracy(ŷ, y)
+            f1metric = f1(ŷ, y)
             for s in steps
                 push!(loss_at[s], lossfn(ŷ[:, :, s, :], y[:, :, s, :]))
                 push!(acc_at[s], accuracy(ŷ[:, :, s, :], y[:, :, s, :]))
+                push!(f1_at[s], f1(ŷ[:, :, s, :], y[:, :, s, :]))
             end
             push!(losses, loss)
             push!(accuracies, acc)
-            next!(progress; showvalues = [("loss", loss), ("acc", acc)])
+            push!(f1s, f1metric)
+            next!(progress; showvalues = [("loss", loss), ("acc", acc), ("f1", f1metric)])
         end
         logmetric(mlf, run_info, "loss_test", mean(losses); step=epoch)
         logmetric(mlf, run_info, "acc_test", mean(accuracies); step=epoch)
+        logmetric(mlf, run_info, "f1_test", mean(f1s); step=epoch)
         for s in steps
             logmetric(mlf, run_info, "acc_test.$(s)", mean(acc_at[s]); step=epoch)
             logmetric(mlf, run_info, "loss_test.$(s)", mean(loss_at[s]); step=epoch)
+            logmetric(mlf, run_info, "f1_test.$(s)", mean(f1_at[s]); step=epoch)
         end
 
         if ((epoch - 1) % 4 == 0) || (epoch == n_steps)
@@ -198,15 +218,16 @@ function objective(; kwargs...)
 end
 
 
-objective(;
-    k_h=5,
-    k_x=5,
-    hidden=(32, 16, 16),
-    seed=42,
-    eta=3e-4,
-    rho=0.9,
-    n_steps=30,
-    batchsize=8,
-    use_bias=(true, false, false),
-)
-
+for h in (64, 128), eta in (3e-4, 1e-3), b in ((false, false, false), )
+    objective(;
+        k_h=5,
+        k_x=5,
+        hidden=(h, h ÷ 2, h ÷ 2),
+        seed=42,
+        eta=eta,
+        rho=0.9,
+        n_steps=30,
+        batchsize=8,
+        use_bias=b,
+    )
+end
